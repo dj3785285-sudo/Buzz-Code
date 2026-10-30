@@ -1640,11 +1640,34 @@ def _rgb_tail(cell) -> str:
         return ""
 
 
+_PLAIN = (str, int, float, bool, bytes)
+
+
+def _norm_value(v):
+    """Comparable form of a cell value.
+
+    OpenPyXL returns objects for array/data-table formulas, and two separately loaded objects never
+    compare equal even when they hold the same formula - which made the verification fail on
+    untouched cells.  Such objects are reduced to their attributes; plain values and dates are kept.
+    """
+    if v is None or isinstance(v, _PLAIN) or hasattr(v, "isoformat"):
+        return v
+    attrs = getattr(v, "__dict__", None)
+    if attrs:
+        return (type(v).__name__, tuple(sorted((k, str(x)) for k, x in attrs.items())))
+    return (type(v).__name__, str(v))
+
+
+def _short(v, n: int = 60) -> str:
+    text = repr(v)
+    return text if len(text) <= n else text[: n - 3] + "..."
+
+
 def _cell_signature(c) -> tuple:
     """(value, fill type, fill rgb, number format) - works for normal and read-only cells."""
     fill = c.fill
     ftype = getattr(fill, "fill_type", None) if fill is not None else None
-    return (c.value, ftype, _rgb_tail(c), c.number_format or "General")
+    return (_norm_value(c.value), ftype, _rgb_tail(c), c.number_format or "General")
 
 
 def _fingerprints(data: bytes, skip: Dict[Tuple[str, int, int], str]):
@@ -1688,8 +1711,11 @@ def _detailed_diff(original: bytes, output: bytes, changed) -> List[str]:
                 if (name, co.row, co.column) in changed:
                     continue
                 cn = sn.cell(row=co.row, column=co.column)
-                if co.value != cn.value:
-                    issues.append(f"{name}!{co.coordinate}: value changed unexpectedly")
+                if _norm_value(co.value) != _norm_value(cn.value):
+                    issues.append(
+                        f"{name}!{co.coordinate}: value changed unexpectedly "
+                        f"(was {_short(_norm_value(co.value))}, now {_short(_norm_value(cn.value))})"
+                    )
                 elif (co.fill.fill_type, _rgb_tail(co)) != (cn.fill.fill_type, _rgb_tail(cn)):
                     issues.append(f"{name}!{co.coordinate}: fill changed unexpectedly")
                 elif co.number_format != cn.number_format:
