@@ -12,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from core.inspector import QuestionMapping
+from ott_core.inspector import QuestionMapping
 from core import (
     DEFAULT_CHECKS,
     DEFAULT_THRESHOLD,
